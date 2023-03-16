@@ -10,8 +10,8 @@ int main() {
     net::reactor rec;
     net::tcp_serv_socket serv_sock;
 
-    serv_sock.set_reuse_address();
-    serv_sock.set_nonblocking();
+    net::set_nonblocking(serv_sock.get_fd());
+    net::set_reuse_address(serv_sock.get_fd());
     serv_sock.listen_req(net::localhost, 9090);
 
     auto conn_cb = [&]() {
@@ -37,9 +37,9 @@ int main() {
         buf[ret] = '\0';
         std::cout << "receive content: " << buf;
         if (ret == (sz - 1)) {
-            rec.add_event(fd, net::event::readable, net::pattern::et_oneshot);
+            rec.mod_event(fd, net::event::readable, net::pattern::et_oneshot);
         } else {
-            rec.add_event(fd, net::event::writable, net::pattern::et_oneshot);
+            rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot);
         }
     });
 
@@ -48,10 +48,10 @@ int main() {
         const size_t len = strlen(hello);
         size_t ret = write(fd, hello, len);
         if (ret == len) {  // 发送完毕，继续监听读事件
-            rec.add_event(fd, net::event::readable, net::pattern::et_oneshot);
+            rec.mod_event(fd, net::event::readable, net::pattern::et_oneshot);
         } else {
             std::cout << "[warn]: The data hasn't been sent completly\n";
-            rec.add_event(fd, net::event::readable, net::pattern::et_oneshot);  // 这里仅做简化处理
+            rec.mod_event(fd, net::event::readable, net::pattern::et_oneshot);  // 这里仅做简化处理
         }
     });
     rec.set_disconnect_cb([](int fd) {

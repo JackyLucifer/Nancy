@@ -2,7 +2,7 @@
 using namespace nc;
 
 int main() {
-    log::asynlogger::initialize("./logfiles/", "test_log", 1);
+    log::asynclogger::initialize("./logfiles/", "test_log", 1);
     // 构造完毕
 
     LOG_INFO << "Nancy"<<0.1<<" said " <<"hello world";  //自带'\n'

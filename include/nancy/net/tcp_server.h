@@ -152,7 +152,7 @@ public:
     template <typename F>
     void add_signal(int sig, F&& cb) {
         signal_cbs[sig] = std::forward<F>(cb);
-        details::signal_add(sig);
+        signal_add(sig);
     }
 
     /**
