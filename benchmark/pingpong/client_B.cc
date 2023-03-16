@@ -5,6 +5,7 @@
 #include <vector>
 #include <atomic>
 #include <cstdlib>
+#include <cassert>
 #include <condition_variable>
 #include <chrono>
 using namespace nc;
@@ -36,54 +37,39 @@ void mesg_sender () {
 
     for (int i = 0; i < conn_nums; ++i) {
         int fd = socks[i].get_fd();
+        assert(net::get_send_bufsz(fd) >= mesg_sz); // 避免缓冲区过小影响测量结果
         net::set_tcp_nondelay(fd);
         socks[i].launch_req("127.0.0.1", 9090);  
         net::set_nonblocking(fd);
         connected++;
-        rec.add_socket(fd, net::event::writable, net::pattern::et);
+        rec.add_socket(fd, net::event::writable, net::pattern::lt);
     }
     {
         std::lock_guard<std::mutex> lock(out_lok);
         std::cout<<"tid: "<<std::this_thread::get_id()<<" conn: "<<connected<<std::endl;
     }
 
-    uint64_t total_bytes = 0;
+    uint64_t total_send_bytes = 0;
     char buffer[mesg_sz];
     memset(buffer, mesg_sz, 'x');  // message
 
+    // 不断发送数据
     rec.set_writable_cb([&](int fd) {
         int tmp = 0;
         int send_bytes = 0;
         while ((tmp = send(fd, buffer+send_bytes, mesg_sz-send_bytes, 0)) > 0) {
             send_bytes += tmp;
         }
-        rec.mod_event(fd, net::event::readable, net::pattern::et); // 触发后修改模式
-    });
-
-    rec.set_readable_cb([&](int fd){
-        int tmp = 0;
-        int recv_bytes = 0;
-        int send_bytes = 0;
-        // 接收16k数据
-        while ((tmp = recv(fd, buffer+recv_bytes, mesg_sz-recv_bytes, 0)) > 0) {
-            recv_bytes += tmp;
-        }
-        // 发送16k数据
-        while ((tmp = send(fd, buffer+send_bytes, mesg_sz-send_bytes, 0)) > 0) {
-            send_bytes += tmp;
-        }
-        total_bytes += send_bytes;
-        total_bytes += recv_bytes;
+        total_send_bytes += send_bytes;
     });
 
     // 负责退出打印和记录信息
     rec.set_disconnect_cb([&](int fd){
-        connected--;
-        if (connected == 0) {
+        if (--connected == 0) {  // 全部连接已经断开
             {
                 std::lock_guard<std::mutex> lock(out_lok);
-                std::cout<<"tid: "<<std::this_thread::get_id()<<" bytes: "<<total_bytes<<std::endl;
-                bytes_collect.fetch_add(total_bytes, std::memory_order_relaxed); // 全双工模式
+                std::cout<<"tid: "<<std::this_thread::get_id()<<"send bytes: "<<total_send_bytes<<std::endl;
+                bytes_collect.fetch_add(total_send_bytes, std::memory_order_relaxed); // 全双工模式
             }
             {
                 std::unique_lock<std::mutex> lock(cv_lok);
@@ -91,7 +77,7 @@ void mesg_sender () {
             }
             thread_done_cv.notify_one();
             rec.shutdown(); // 关闭reactor
-        }
+        } 
     });
     time_start.store(get_absolute_time());
     rec.activate();

@@ -141,7 +141,7 @@ public:
      * @brief 发起连接请求
      * @param remote_ip 远程ip
      * @param remote_port 远程端口
-     * @return 成功: 0 | 失败: -1
+     * @return 失败抛出异常信息
      */
     void launch_req(const char* remote_ip, int remote_port) {
         struct sockaddr_in sock_addr;

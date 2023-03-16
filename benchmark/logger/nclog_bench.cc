@@ -19,7 +19,7 @@ void nanolog_benchmark() {
         LOG_INFO << "Log " << benchmark << i << 0 << 'K' << -42.42;
     uint64_t end = timestamp_now();
     long int avg_latency = (end - begin) * 1000 / iterations;
-    printf("\tAverage NanoLog Latency = %ld nanoseconds\n", avg_latency);
+    printf("\tAverage nclog Latency = %ld nanoseconds\n", avg_latency);
 }
 
 template <typename Function>
