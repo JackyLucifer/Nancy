@@ -1,15 +1,19 @@
-#include "nancy/net/tcp_server.h"
+#include "nancy/net/reactor.h"
+using namespace nc;
 
 int main() {
-    nc::net::tcp_server serv(nc::net::localhost);  // port: 9090
-    const int buf_sz = 1025;
-    char buf[buf_sz];
-    serv.set_readable_cb([&](int fd) {
-        int rcv = 0;
-        while ((rcv = read(fd, buf, buf_sz - 1)) > 0) {
-            write(fd, buf, rcv);
-        }
-        serv.add_event(fd, nc::net::event::readable);
+    net::reactor rec;
+    net::tcp_serv_socket sock;
+    sock.listen_req(net::localhost, 9090);  // 监听IP+端口
+    rec.add_socket(sock.get_fd(), net::event::readable, net::pattern::lt, [&sock, &rec](int){
+        int tmp = sock.accept_req();  
+        net::set_nonblocking(tmp);   // 非阻塞+lt实现
+        rec.add_socket(tmp, net::event::readable, net::pattern::lt);
     });
-    serv.activate();
+    char buf[1024];
+    rec.set_readable_cb([&buf](int fd) {
+        int rcv = read(fd, buf, 1024);
+        write(fd, buf, rcv);
+    });
+    rec.activate();  // 激活
 }

@@ -8,6 +8,7 @@ int main() {
 
     clnt.launch_req(net::localhost, 9090);
     write(clnt.get_fd(), hello, strlen(hello));
+    std::cout<<"block in write"<<std::endl;
 
     char buf[128];
     int ret = read(clnt.get_fd(), buf, 128);

@@ -1,4 +1,4 @@
-#!bin/base
+#!/bin/bash
 
 include="../../include"
 g++ -std=c++11 -I $include ./echo_server.cc ../../src/signal.cc -o echo_server

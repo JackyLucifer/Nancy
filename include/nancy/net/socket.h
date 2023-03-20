@@ -20,8 +20,8 @@ struct socket_base {
     socket_base() = default;
     virtual ~socket_base() = default;
     virtual int get_fd() const = 0;
-    virtual void shutdown() = 0;
     virtual int release() = 0;  
+    virtual void shutdown() = 0;
 };
 
 // 基于tcp协议的服务端socket
@@ -32,15 +32,14 @@ public:
         sock = socket(PF_INET, SOCK_STREAM, 0);
         assert(-1 != sock);
     }
+    explicit tcp_serv_socket(int fd): sock(fd) {}
     tcp_serv_socket(const tcp_serv_socket&) = delete;
     tcp_serv_socket(tcp_serv_socket&& other) noexcept {
-        sock = other.sock;
-        other.sock = 0;
+        sock = other.release();
     }
     tcp_serv_socket& operator=(const tcp_serv_socket&) = delete;
     tcp_serv_socket& operator=(tcp_serv_socket&& other) {
-        sock = other.sock;
-        other.sock = 0;
+        sock = other.release();
         return *this;
     }
     ~tcp_serv_socket() {
@@ -120,15 +119,14 @@ public:
         sock = socket(PF_INET, SOCK_STREAM, 0);
         assert(-1 != sock);
     }
+    explicit tcp_clnt_socket(int fd): sock(fd) {}
     tcp_clnt_socket(const tcp_clnt_socket&) = delete;
     tcp_clnt_socket(tcp_clnt_socket&& other) noexcept {
-        sock = other.sock;
-        other.sock = 0;
+        sock = other.release();
     }
     tcp_clnt_socket& operator=(const tcp_clnt_socket&) = delete;
     tcp_clnt_socket& operator=(tcp_clnt_socket&& other) noexcept {
-        sock = other.sock;
-        other.sock = 0;
+        sock = other.release();
         return *this;
     }
 
@@ -179,6 +177,49 @@ public:
         int ret = sock;
         sock = 0;
         return ret;
+    }
+};
+
+class sockpair {
+    int fds[2] = {0};
+    static const int L = 0;
+    static const int R = 1;
+public:
+    sockpair(int protocol = net::TCP_PROTOCOL) {
+        if (-1 == socketpair(PF_UNIX, protocol, 0, fds)) {
+            perror("Init sockpair");
+            abort();
+        }
+    }
+    sockpair(const sockpair&) = delete;
+    sockpair(sockpair&& other) {
+        std::swap(fds[L], other.fds[L]);
+        std::swap(fds[R], other.fds[R]);
+    }
+    ~sockpair() {
+        close(fds[L]);
+        close(fds[R]);
+    }
+    int get_lfd() const {
+        return fds[L];
+    }
+    int get_rfd() const {
+        return fds[R];
+    }
+    int write_lfd(const char* buf, int sz) const {
+        return write(get_lfd(), buf, sz);
+    }
+    int write_rfd(const char* buf, int sz) const {
+        return write(get_rfd(), buf, sz);
+    }
+    int read_lfd(char* buf, int sz) const {
+        return read(get_lfd(), buf, sz);
+    }
+    int read_rfd(char* buf, int sz) const {
+        return read(get_rfd(), buf, sz);
+    }
+    int get_capacity() const {
+        return net::get_send_bufsz(fds[L]);
     }
 };
 

@@ -17,52 +17,36 @@
 #include "nancy/net/details/signal.h"
 #include "nancy/net/details/typedef.h"
 #include "nancy/net/socket.h"
+#include "nancy/details/type_traits.h"
 
 namespace nc::net {  
 
-// =========================  reactor ===========================
-// Base:
-// 	 epoll
-//
-// React Event+Pattern:
-//   1. connect socket by add_socket(): just "disconnect"
-//   2. modified socket: just "disconnect"
-//   3. add signal by add_signal(): unconsidered
-//   4. add signal by add_socket(): the same with the "1"
-//
-// Note:
-//   Adding too many serv_sock/clnt_sock can seriously affect performance.
-//   The reason is that we use std::map to save them , so we have to search for the callbacks each time
-// =========================  reactor ===========================
-
-
-
-
-// 可定制的反应堆
+/**
+ * @brief 可定制不同触发模式和设置事件回调的反应堆
+ * @note  配置文件在 ./details/config.h。事实上所做的配置并不需要多做更改
+*/
 class reactor {
-    using callback_t = typename std::function<void(int)>;
-
-private:
     bool stop = false;
     int epoll_fd = 0;
     int signal_fd = 0;
+    int timeout = -1;
 
     std::unique_ptr<epoll_event[]> events = {nullptr};
-    callback_t readable_cb = {};
-    callback_t writable_cb = {};
-    callback_t disconnect_cb = {};
-    std::unordered_map<int, std::function<void()>> cb_list = {};
-    std::map<int, std::function<void()>> signal_cbs = {};
-    std::vector<std::unique_ptr<net::socket_base*>> hosting;
+    socket_callback_t readable_cb = {};
+    socket_callback_t writable_cb = {};
+    socket_callback_t disconnect_cb = {};
+    common_callback_t timeout_cb = {};
+    std::unordered_map<int, socket_callback_t> cb_list = {};
+    std::map<int, socket_callback_t> signal_cbs = {};
 
 public:
-    explicit reactor() {
+    explicit reactor(int timeout = -1) {
         assert((epoll_fd = epoll_create(details::EPOLL_CREATE_SIZE)) != -1);
         events.reset(new epoll_event[details::EPOLL_EVENT_BUF_SIZE]);
-
+        this->timeout = timeout;
     }
     ~reactor() noexcept {
-        shutdown();
+        destroy();
     }
 
 private:
@@ -71,6 +55,7 @@ private:
         event.data.fd = sock;
         event.events = ev | pattern | event::disconnect;
         if (-1 == epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock, &event)) {
+            std::cout<<"failed"<<std::endl;
             throw std::runtime_error(std::string("Nancy-reactor: ")+strerror(errno));
         }
     }
@@ -90,13 +75,13 @@ private:
         char signals[buf_sz];
         ret = read(signal_fd, signals, buf_sz);
         for (int i = 0; i < ret; ++i) {
-            signal_cbs[signals[i]]();
+            signal_cbs[signals[i]](signals[i]);
         }
     }
 
 public:
     // 注册信号
-    template <typename F>
+    template <typename F,  typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
     void add_signal(int sig, F&& cb) {
         int fd = signal_socket_init();
         if (fd == -1) {
@@ -111,27 +96,27 @@ public:
     }
 
     /**
-     * @brief 将套接字添加到反应堆中
-     * @param fd 套接字
+     * @brief 添加文件描述符到反应堆中
+     * @param fd 文件描述符
      * @param ev 事件
-     * @param pattern 事件模式
+     * @param pattern 事件模式（Epoll的触发模式）
      */
     void add_socket(int fd, event_t ev, pattern_t pattern) {
         epoll_add(fd, ev, pattern);
     }
 
     /**
-     * @brief 添加套接字（封装在socket.h中的对象）
-     * @tparam F 可执行类型
-     * @param sock 套接字
-     * @param ev 事件类型
-     * @param pattern 触发模式
+     * @brief 添加文件描述符到反应堆中
+     * @tparam F 可执行对象
+     * @param fd 文件描述符
+     * @param ev 事件
+     * @param pattern 事件模式
      * @param cb 回调函数
      */
-    template <typename F>
-    void add_socket(const net::socket_base& sock, event_t ev, pattern_t pattern, F&& cb) {
-        cb_list.emplace(std::make_pair<int, std::function<void()>>(sock.get_fd(), std::forward<F>(cb)));
-        epoll_add(sock.get_fd(), ev, pattern);
+    template <typename F,  typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
+    void add_socket(int fd, event_t ev, pattern_t pattern, F&& cb) {
+        cb_list.emplace(fd, std::forward<F>(cb));
+        epoll_add(fd, ev, pattern);
     }
 
     /**
@@ -144,37 +129,72 @@ public:
     }
 
     // 设置可写回调
-    template <typename F>
+    template <typename F,  typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
     void set_readable_cb(F&& cb) {
         readable_cb = std::forward<F>(cb);
     }
+    
     // 设置可读事件回调
-    template <typename F>
+    template <typename F,  typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
     void set_writable_cb(F&& cb) {
         writable_cb = std::forward<F>(cb);
     }
+    
     // 对端关闭/异常的回调，默认关闭socket
-    template <typename F>
+    template <typename F,  typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
     void set_disconnect_cb(F&& cb) {
         disconnect_cb = std::forward<F>(cb);
     }
+
+    template <typename F,  typename = typename std::enable_if<nc::details::is_runnable<F>::value>::type>
+    void set_timeout_cb(F&& cb) {
+        timeout_cb = std::forward<F>(cb);
+    }
+
+    /**
+     * @brief 重置超时时间
+     * @param timeout 
+     */
+    void reset_timeout(int timeout) {
+        this->timeout = timeout;
+    }
+
+    // 获取可读事件的回调函数的引用
+    auto get_readable_cb() -> const socket_callback_t& {
+        return readable_cb;
+    }
+
+    // 获取可写事件的回调函数的引用
+    auto get_writable_cb() -> const socket_callback_t& {
+        return writable_cb;
+    }
+
+    // 获取连接关闭的回调函数的引用
+    auto get_disconnect_cb()-> const socket_callback_t& {
+        return disconnect_cb;
+    }
+
+    // 获取超时回调函数的引用
+    auto get_timeout_cb() -> const common_callback_t& {
+        return timeout_cb;
+    }
+
 
     /**
      * @brief 激活reactor，并阻塞所在线程
      */
     void activate() {
         int fd = 0;
-        int count = 0;
         int event_nums = 0;
-        int curr_bufsz = details::EPOLL_EVENT_BUF_SIZE;
         decltype(cb_list)::iterator it(nullptr);
         while (!stop) {
-            // 等待事件
-            event_nums = epoll_wait(epoll_fd, events.get(), curr_bufsz, -1);
+            event_nums = epoll_wait(epoll_fd, events.get(), details::EPOLL_EVENT_BUF_SIZE, timeout);
+            if (!event_nums) 
+                timeout_cb();
             for (int i = 0; i < event_nums; i++) {
                 fd = events[i].data.fd;
                 if ((it = cb_list.find(fd)) != cb_list.end()) {
-                    it->second();  //执行回调
+                    it->second(fd);  
                 } else if (events[i].events & event::disconnect) {
                     if (static_cast<bool>(disconnect_cb)) {
                         disconnect_cb(fd);
@@ -189,26 +209,13 @@ public:
                     writable_cb(fd);
                 }
             }
-            // 动态调整epoll event buf
-            if (event_nums == curr_bufsz) {
-                curr_bufsz *= 2;
-                count = 0;
-            } else if (event_nums < (curr_bufsz / 2)) {
-                if (++count > 128) {
-                    curr_bufsz /= 2;
-                    count = 0;
-                } else {
-                    continue;
-                }
-            } else {
-                count = 0;
-                continue;
-            }
-            events.reset(new epoll_event[curr_bufsz]);
         }
     }
 
-    void shutdown() noexcept {
+    /**
+     * @brief 关闭反应堆，能否立即执行要取决于timeout的设定和目前的执行状态等
+     */
+    void destroy() noexcept {
         if (!stop) {
             stop = true;
             close(epoll_fd);

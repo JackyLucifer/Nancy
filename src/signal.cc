@@ -2,7 +2,6 @@
 #include <sys/socket.h>
 
 #include <cassert>
-#include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <functional>
@@ -15,8 +14,8 @@
 // ======================
 
 static int pipe_fd[2] = {0};
-static const int SIGNAL_PIPE_IN = 1;
-static const int SIGNAL_PIPE_OUT = 0;
+static const int IN = 1;
+static const int OUT = 0;
 static std::mutex signal_lock;
 static void signal_handler(int sig);
 
@@ -34,7 +33,7 @@ int nc::net::signal_socket_init() {
         throw std::logic_error("Can't init signal pipe");
     }
     nc::net::set_nonblocking(pipe_fd[1]);
-    return pipe_fd[SIGNAL_PIPE_OUT];
+    return pipe_fd[OUT];
 }
 
 void nc::net::signal_add(int sig) {
@@ -55,6 +54,6 @@ void nc::net::signal_socket_close() {
 void signal_handler(int sig) {
     int save_errno = errno;
     int msg = sig;
-    send(pipe_fd[SIGNAL_PIPE_IN], (char*)&msg, 1, 0);
+    send(pipe_fd[IN], (char*)&msg, 1, 0);
     errno = save_errno;
 }

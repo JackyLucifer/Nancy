@@ -1,3 +1,3 @@
-[2023-03-16 11:19:28.955671][INFO][139950501521216][test_log.cc:main:8] Nancy0.1 said hello world
-[2023-03-16 11:19:28.955672][WARN][139950501521216][test_log.cc:main:9] 20 is greater then 10
-[2023-03-16 11:19:28.955673][CRIT][139950501521216][test_log.cc:main:10] A string was logged!
+[2023-03-17 17:26:01.364520][INFO][140184109418304][test_log.cc:main:8] Nancy0.1 said hello world
+[2023-03-17 17:26:01.364522][WARN][140184109418304][test_log.cc:main:9] 20 is greater then 10
+[2023-03-17 17:26:01.364522][CRIT][140184109418304][test_log.cc:main:10] A string was logged!

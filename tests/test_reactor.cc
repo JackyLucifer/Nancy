@@ -2,9 +2,9 @@
 #include "nancy/net/reactor.h"
 using namespace nc;
 
-// ================================
-//          灵活的reactor
-// ================================
+// ================================================================================
+//         reactor编写: 单线程+ET+OneShot+Nonblocking的网络模型
+// ================================================================================
 
 int main() {
     net::reactor rec;
@@ -14,7 +14,7 @@ int main() {
     net::set_reuse_address(serv_sock.get_fd());
     serv_sock.listen_req(net::localhost, 9090);
 
-    auto conn_cb = [&]() {
+    auto conn_cb = [&](int) {
         int sock = 0;
         while (1) {
             sock = serv_sock.accept_req();  // 调用原socket的accept接收连接
@@ -27,8 +27,7 @@ int main() {
             }
         }
     };
-    rec.add_socket(serv_sock, net::event::readable, net::pattern::et, conn_cb);
-    // 以上将reactor改造得和tcp_server的属性功能相同
+    rec.add_socket(serv_sock.get_fd(), net::event::readable, net::pattern::et, conn_cb);
 
     rec.set_readable_cb([&](int fd) {
         const size_t sz = 1024;

@@ -12,7 +12,7 @@
 #include <vector>
 
 /* Returns microseconds since epoch */
-uint64_t timestamp_now() { return std::chrono::high_resolution_clock::now().time_since_epoch() / std::chrono::microseconds(1); }
+uint64_t get_absolute_time() { return std::chrono::high_resolution_clock::now().time_since_epoch() / std::chrono::microseconds(1); }
 
 template <typename Function>
 void run_log_benchmark(Function&& f, char const* const logger) {
@@ -20,9 +20,9 @@ void run_log_benchmark(Function&& f, char const* const logger) {
     std::vector<uint64_t> latencies;
     char const* const benchmark = "benchmark";
     for (int i = 0; i < iterations; ++i) {
-        uint64_t begin = timestamp_now();
+        uint64_t begin = get_absolute_time();
         f(i, benchmark);
-        uint64_t end = timestamp_now();
+        uint64_t end = get_absolute_time();
         latencies.push_back(end - begin);
     }
     std::sort(latencies.begin(), latencies.end());

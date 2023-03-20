@@ -1,3 +1,4 @@
+#!/bin/bash
 # 你需要将spdlog克隆到本文件夹中再运行bench文件
 
 # nclog bench

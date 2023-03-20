@@ -15,7 +15,9 @@ int conn_nums = 0;
 const int mesg_sz = 16*1024; 
 
 // 线程通知机制
-int thread_done_nums = 0;
+int thr_nums = 0;
+int thr_done_nums = 0;
+std::atomic_int thr_start_nums = {0};
 std::mutex cv_lok;
 std::condition_variable thread_done_cv;
 
@@ -38,16 +40,19 @@ void mesg_sender () {
     for (int i = 0; i < conn_nums; ++i) {
         int fd = socks[i].get_fd();
         assert(net::get_send_bufsz(fd) >= mesg_sz); // 避免缓冲区过小影响测量结果
-        net::set_tcp_nondelay(fd);
         socks[i].launch_req("127.0.0.1", 9090);  
-        net::set_nonblocking(fd);
+        net::set_nonblocking(fd);  // 非阻塞IO
         connected++;
-        rec.add_socket(fd, net::event::writable, net::pattern::lt);
+        rec.add_socket(fd, net::event::writable, net::pattern::et_oneshot);
     }
     {
         std::lock_guard<std::mutex> lock(out_lok);
-        std::cout<<"tid: "<<std::this_thread::get_id()<<" conn: "<<connected<<std::endl;
-    }
+        std::cout<<"["<<std::this_thread::get_id()<<"] conn: "<<connected<<std::endl;
+    } 
+    thr_start_nums++;
+    while (thr_start_nums < thr_nums) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10)); // 等待所有线程连接完毕
+    } 
 
     uint64_t total_send_bytes = 0;
     char buffer[mesg_sz];
@@ -61,22 +66,24 @@ void mesg_sender () {
             send_bytes += tmp;
         }
         total_send_bytes += send_bytes;
+        rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot);
     });
+    
 
     // 负责退出打印和记录信息
     rec.set_disconnect_cb([&](int fd){
         if (--connected == 0) {  // 全部连接已经断开
             {
                 std::lock_guard<std::mutex> lock(out_lok);
-                std::cout<<"tid: "<<std::this_thread::get_id()<<"send bytes: "<<total_send_bytes<<std::endl;
+                std::cout<<"["<<std::this_thread::get_id()<<"] send bytes: "<<total_send_bytes<<std::endl;
                 bytes_collect.fetch_add(total_send_bytes, std::memory_order_relaxed); // 全双工模式
             }
             {
                 std::unique_lock<std::mutex> lock(cv_lok);
-                thread_done_nums++;
+                thr_done_nums++;
             }
             thread_done_cv.notify_one();
-            rec.shutdown(); // 关闭reactor
+            rec.destroy(); // 销毁reactor
         } 
     });
     time_start.store(get_absolute_time());
@@ -86,7 +93,7 @@ void mesg_sender () {
 int main(int argn, char** args) {
 
     assert(argn == 3);
-    int tnums = atoi(args[1]);   // 线程数
+    thr_nums = atoi(args[1]);   // 线程数
     conn_nums = atoi(args[2]);   // 每条线程的连接数
 
     int fd = net::signal_socket_init();   // 初始化信号机制以屏蔽SIGPIPE
@@ -94,14 +101,11 @@ int main(int argn, char** args) {
     // 当信号传来时我们忽略它(不处理fd即可)
 
     std::vector<std::thread> threadpool;
-    for (int i = 0; i < tnums; ++i) {
+    for (int i = 0; i < thr_nums; ++i) {
         threadpool.emplace_back(mesg_sender);    
     }
-    for (auto& t: threadpool) {
-        t.detach();
-    }
     std::unique_lock<std::mutex> lock(cv_lok);
-    thread_done_cv.wait(lock, [&tnums]{return thread_done_nums == tnums;});
+    thread_done_cv.wait(lock, []{return thr_done_nums == thr_nums;});
 
     auto time_cost = get_absolute_time() - time_start.load();
     std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 等待其它IO输出
@@ -109,5 +113,7 @@ int main(int argn, char** args) {
     double mb = ((double)bytes_collect.load()/(double)(1024*1024));
     std::cout<<"Handling capacity of Nancy: "<< mb/time_cost<<" (mb/s)"<< std::endl;
    
-
+    for (auto& t: threadpool) {
+        t.detach();
+    }
 }

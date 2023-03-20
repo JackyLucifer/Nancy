@@ -1,7 +1,5 @@
 #pragma once
 #include <functional>
-#include <vector>
-#include <thread>
 
 namespace nc::net {
 
