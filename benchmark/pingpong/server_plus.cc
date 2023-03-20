@@ -22,7 +22,7 @@ int main(int argn, char** args) {
 
     int mesg_sz = 16*1024;
     char buffer[mesg_sz];
-    recs.set_readable_cb([&buffer, &mesg_sz](int fd){
+    recs.set_readable_cb([&buffer, &mesg_sz](net::reactor* , int fd){
         int tmp = 0;
         int recv_bytes = 0;
         while ((tmp = recv(fd, buffer, mesg_sz-recv_bytes, 0)) > 0) { // 读取16k

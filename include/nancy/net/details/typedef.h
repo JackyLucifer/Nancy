@@ -29,8 +29,12 @@ struct pattern {
 };
 
 
+class reactor;
+
 // 回调类型
 using socket_callback_t = typename std::function<void(int)>;
 using common_callback_t = typename std::function<void()>;
+using reactor_socket_callback_t = typename std::function<void(reactor*, int)>;
+using reactor_common_callback_t = typename std::function<void(reactor*)>;
 
 }

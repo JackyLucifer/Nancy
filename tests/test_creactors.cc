@@ -26,14 +26,14 @@ int main(int argn, char** args) {
         net::set_nonblocking(fd);
         rec->add_socket(fd, net::event::readable, net::pattern::lt);
     });
-    recs.set_readable_cb([](int fd){
+    recs.set_readable_cb([](net::reactor*, int fd){
         int bytes = 0;
         char buf[128];
         while ((bytes = recv(fd, buf, 128, 0)) > 0) { // 读取16k
             send(fd, buf, bytes, 0);
         } 
     });
-    recs.set_disconnect_cb([](int fd){
+    recs.set_disconnect_cb([](net::reactor*, int fd){
         std::cout<<"creactors disconnect: "<<fd<<std::endl;
         close(fd);
     });

@@ -9,9 +9,11 @@
 #include <chrono>
 using namespace nc;
 
-// 具体pingpong细节
+#define RECV_BYTES 16384
+#define SEND_BYTES 4096
+
+// 连接数
 int conn_nums = 0;
-const int mesg_sz = 16*1024; 
 
 // 线程通知机制
 int thr_nums = 0;
@@ -22,6 +24,7 @@ std::condition_variable thread_done_cv;
 
 std::atomic<double> time_start;
 std::atomic<uint64_t> bytes_collect = {0};
+std::atomic<uint32_t> requests_collect = {0};
 
 // 让输出工整
 std::mutex out_lok;
@@ -38,7 +41,7 @@ void mesg_sender () {
 
     for (int i = 0; i < conn_nums; ++i) {
         int fd = socks[i].get_fd();
-        assert(net::get_send_bufsz(fd) >= mesg_sz); // 避免缓冲区过小影响测量结果
+        assert(net::get_send_bufsz(fd) >= SEND_BYTES); // 避免缓冲区过小影响测量结果
         socks[i].launch_req("127.0.0.1", 9090);  
         net::set_nonblocking(fd);  // 非阻塞IO
         connected++;
@@ -53,29 +56,61 @@ void mesg_sender () {
         std::this_thread::sleep_for(std::chrono::milliseconds(10)); // 等待所有线程连接完毕
     } 
 
-    uint64_t total_send_bytes = 0;
-    char buffer[mesg_sz];
-    memset(buffer, mesg_sz, 'x');  // message
+    uint64_t total_bytes = 0;
+    uint32_t requests = 0;
 
-    // 不断发送数据
-    rec.set_writable_cb([&](int fd) {
-        int tmp = 0;
-        int send_bytes = 0;
-        while ((tmp = send(fd, buffer+send_bytes, mesg_sz-send_bytes, 0)) > 0) {
-            send_bytes += tmp;
-        }
-        total_send_bytes += send_bytes;
-        rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot);
-    });
+    // message, buffer, info, count
+    char mesg[SEND_BYTES];
+    memset(mesg, SEND_BYTES, 'y');  
+    mesg[SEND_BYTES-1] = 'x';
     
+    char empty_buf[RECV_BYTES];
+    std::vector<std::pair<int, int>> info(20000, {0,0}); // ridx, widx
+
+
+    // 发送数据
+    rec.set_writable_cb([&](int fd) {
+        int bytes = 0;
+        int idx = info[fd].second;
+        while ((bytes = send(fd, mesg+idx, SEND_BYTES-idx, 0)) > 0) {
+            idx += bytes;
+        }
+        if (idx == SEND_BYTES) {
+            info[fd].second = 0;
+            rec.mod_event(fd, net::event::readable, net::pattern::et);
+            total_bytes += SEND_BYTES;
+        } else {
+            info[fd].second = idx;
+            rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot); 
+        }
+    });
+    // 读取16k
+    rec.set_readable_cb([&](int fd) {
+        int bytes = 0;
+        int idx = info[fd].first;
+        while ((bytes = recv(fd, empty_buf+idx, RECV_BYTES-idx, 0)) > 0) {
+            idx += bytes;
+        }
+        if (idx == RECV_BYTES) {
+            info[fd].first = 0;
+            total_bytes += RECV_BYTES;
+            requests += 1;
+            rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot);
+        } else {
+            info[fd].first = idx;
+            return ;
+        }
+    });
+
 
     // 负责退出打印和记录信息
     rec.set_disconnect_cb([&](int fd){
         if (--connected == 0) {  // 全部连接已经断开
             {
                 std::lock_guard<std::mutex> lock(out_lok);
-                std::cout<<"["<<std::this_thread::get_id()<<"] send bytes: "<<total_send_bytes<<std::endl;
-                bytes_collect.fetch_add(total_send_bytes, std::memory_order_relaxed); // 全双工模式
+                std::cout<<"["<<std::this_thread::get_id()<<"] exchange bytes: "<<total_bytes<<std::endl;
+                bytes_collect.fetch_add(total_bytes, std::memory_order_relaxed);  // 交换的字节数
+                requests_collect.fetch_add(requests, std::memory_order_relaxed);  // 请求完成数
             }
             {
                 std::unique_lock<std::mutex> lock(cv_lok);
@@ -92,10 +127,10 @@ void mesg_sender () {
 int main(int argn, char** args) {
 
     assert(argn == 3);
-    thr_nums = atoi(args[1]);   // 线程数
+    thr_nums = atoi(args[1]);    // 线程数
     conn_nums = atoi(args[2]);   // 每条线程的连接数
 
-    int fd = net::signal_socket_init();   // 初始化信号机制以屏蔽SIGPIPE
+    net::signal_socket_init();   // 初始化信号机制以屏蔽SIGPIPE
     net::signal_add(SIGPIPE);
     // 当信号传来时我们忽略它(不处理fd即可)
 
@@ -110,7 +145,8 @@ int main(int argn, char** args) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 等待其它IO输出
     std::cout<<"Total time cost: "<<time_cost<<" seconds"<<std::endl;
     double mb = ((double)bytes_collect.load()/(double)(1024*1024));
-    std::cout<<"Handling capacity of Nancy: "<< mb/time_cost<<" (mb/s)"<< std::endl;
+    std::cout<<"Bytes exchange rate: "<< mb/time_cost<<" (mb/s)"<< std::endl;
+    std::cout<<"QPS of Nancy: "<<requests_collect.load()/time_cost<<"(req/s)"<<std::endl;
    
     for (auto& t: threadpool) {
         t.detach();

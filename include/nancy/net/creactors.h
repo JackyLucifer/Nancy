@@ -40,7 +40,6 @@ class creactors {
         }
     };
     using node_ptr = std::shared_ptr<async_node>;
-    using connect_cb_t = std::function<void(reactor*, int)>;
 
 private:
     int  cur = 0;   
@@ -54,11 +53,11 @@ private:
     std::vector<node_ptr> nodes;
     std::vector<std::thread> workers;
 
-    connect_cb_t conn_cb = {};
-    socket_callback_t readable_cb = {};
-    socket_callback_t writable_cb = {};
-    socket_callback_t disconnect_cb = {};
-    common_callback_t timeout_cb = {};
+    net::reactor_socket_callback_t conn_cb = {};
+    net::reactor_socket_callback_t readable_cb = {};
+    net::reactor_socket_callback_t writable_cb = {};
+    net::reactor_socket_callback_t disconnect_cb = {};
+    net::reactor_common_callback_t timeout_cb = {};
 
 public:
     explicit creactors() {}
@@ -138,7 +137,7 @@ public:
      * @tparam F 可执行对象，参数为int
      * @param cb 回调
      */
-    template <typename F, typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
+    template <typename F, typename = typename std::enable_if<nc::details::is_runnable<F, reactor*, int>::value>::type>
     void set_readable_cb(F&& cb) {
         readable_cb = std::forward<F>(cb);
     }
@@ -148,7 +147,7 @@ public:
      * @tparam F 可执行对象，参数为int
      * @param cb 回调
      */
-    template <typename F, typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
+    template <typename F, typename = typename std::enable_if<nc::details::is_runnable<F, reactor*, int>::value>::type>
     void set_writable_cb(F&& cb) {
         writable_cb = std::forward<F>(cb);
     }
@@ -158,7 +157,7 @@ public:
      * @tparam F 可执行对象，参数为int
      * @param cb 回调
      */
-    template <typename F, typename = typename std::enable_if<nc::details::is_runnable<F>::value>::type>
+    template <typename F, typename = typename std::enable_if<nc::details::is_runnable<F, reactor*>::value>::type>
     void set_timeout_cb(F&& cb) {
         timeout_cb = std::forward<F>(cb);
     }
@@ -168,7 +167,7 @@ public:
      * @tparam F 可执行对象，参数为int
      * @param cb 回调
      */
-    template <typename F, typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
+    template <typename F, typename = typename std::enable_if<nc::details::is_runnable<F, reactor*, int>::value>::type>
     void set_disconnect_cb(F&& cb) {
         disconnect_cb = std::forward<F>(cb);
     }
@@ -250,19 +249,19 @@ private:
         // 以定制的回调为更高优先级
         if (readable_cb && !rec->get_readable_cb()) {
             auto tmp_rdable_cb = readable_cb;
-            rec->set_readable_cb([tmp_rdable_cb](int fd){ tmp_rdable_cb(fd); });
+            rec->set_readable_cb([tmp_rdable_cb, rec](int fd){ tmp_rdable_cb(rec, fd); });
         } 
         if (writable_cb && !rec->get_writable_cb()) {
             auto tmp_wtable_cb = writable_cb;
-            rec->set_writable_cb([tmp_wtable_cb](int fd){ tmp_wtable_cb(fd); });
+            rec->set_writable_cb([tmp_wtable_cb, rec](int fd){ tmp_wtable_cb(rec, fd); });
         }
         if (disconnect_cb && !rec->get_disconnect_cb()) {
             auto tmp_disconn_cb = disconnect_cb;
-            rec->set_disconnect_cb([tmp_disconn_cb](int fd){ tmp_disconn_cb(fd); });
+            rec->set_disconnect_cb([tmp_disconn_cb, rec](int fd){ tmp_disconn_cb(rec, fd); });
         }
         if (timeout_cb && !rec->get_timeout_cb()) {
             auto tmp_tout_cb = timeout_cb;
-            rec->set_timeout_cb([tmp_tout_cb](){ tmp_tout_cb(); });
+            rec->set_timeout_cb([tmp_tout_cb, rec](){ tmp_tout_cb(rec); });
         }
 
         // 激活反应堆
