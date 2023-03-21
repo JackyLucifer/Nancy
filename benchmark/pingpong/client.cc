@@ -65,7 +65,7 @@ void mesg_sender () {
             send_bytes += tmp;
         }
         total_send_bytes += send_bytes;
-        rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot);
+        rec.reset_event(fd, net::event::writable, net::pattern::et_oneshot);
     });
     
 

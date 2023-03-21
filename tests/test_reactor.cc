@@ -36,9 +36,9 @@ int main() {
         buf[ret] = '\0';
         std::cout << "receive content: " << buf;
         if (ret == (sz - 1)) {
-            rec.mod_event(fd, net::event::readable, net::pattern::et_oneshot);
+            rec.reset_event(fd, net::event::readable, net::pattern::et_oneshot);
         } else {
-            rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot);
+            rec.reset_event(fd, net::event::writable, net::pattern::et_oneshot);
         }
     });
 
@@ -47,10 +47,10 @@ int main() {
         const size_t len = strlen(hello);
         size_t ret = write(fd, hello, len);
         if (ret == len) {  // 发送完毕，继续监听读事件
-            rec.mod_event(fd, net::event::readable, net::pattern::et_oneshot);
+            rec.reset_event(fd, net::event::readable, net::pattern::et_oneshot);
         } else {
             std::cout << "[warn]: The data hasn't been sent completly\n";
-            rec.mod_event(fd, net::event::readable, net::pattern::et_oneshot);  // 这里仅做简化处理
+            rec.reset_event(fd, net::event::readable, net::pattern::et_oneshot);  // 这里仅做简化处理
         }
     });
     rec.set_disconnect_cb([](int fd) {

@@ -49,7 +49,7 @@ int main(int argn, char** args) {
             info[fd].second = 0;
         } else {
             info[fd].second = idx;
-            rec->mod_event(fd, net::event::writable, net::pattern::et_oneshot);
+            rec->reset_event(fd, net::event::writable, net::pattern::et_oneshot);
         }
     });
     recs.set_writable_cb([&](net::reactor* rec, int fd){
@@ -61,10 +61,10 @@ int main(int argn, char** args) {
         }
         if (idx == SEND_BYTES) {
             info[fd].second = 0;
-            rec->mod_event(fd, net::event::readable, net::pattern::et);
+            rec->reset_event(fd, net::event::readable, net::pattern::et);
         } else {
             info[fd].second = idx;
-            rec->mod_event(fd, net::event::writable, net::pattern::et_oneshot);
+            rec->reset_event(fd, net::event::writable, net::pattern::et_oneshot);
         }
     });
     recs.activate();

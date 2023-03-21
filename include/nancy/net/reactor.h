@@ -125,7 +125,7 @@ public:
      * @param sock  套接字
      * @param state 套接字状态
      */
-    void mod_event(int for_whom, event_t event, pattern_t pattern) {
+    void reset_event(int for_whom, event_t event, pattern_t pattern) {
         epoll_mod(for_whom, event, pattern);
     }
 

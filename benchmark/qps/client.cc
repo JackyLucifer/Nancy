@@ -77,11 +77,11 @@ void mesg_sender () {
         }
         if (idx == SEND_BYTES) {
             info[fd].second = 0;
-            rec.mod_event(fd, net::event::readable, net::pattern::et);
+            rec.reset_event(fd, net::event::readable, net::pattern::et);
             total_bytes += SEND_BYTES;
         } else {
             info[fd].second = idx;
-            rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot); 
+            rec.reset_event(fd, net::event::writable, net::pattern::et_oneshot); 
         }
     });
     // 读取16k
@@ -95,7 +95,7 @@ void mesg_sender () {
             info[fd].first = 0;
             total_bytes += RECV_BYTES;
             requests += 1;
-            rec.mod_event(fd, net::event::writable, net::pattern::et_oneshot);
+            rec.reset_event(fd, net::event::writable, net::pattern::et_oneshot);
         } else {
             info[fd].first = idx;
             return ;
