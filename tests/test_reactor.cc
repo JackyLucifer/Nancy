@@ -12,7 +12,7 @@ int main() {
 
     net::set_nonblocking(serv_sock.get_fd());
     net::set_reuse_address(serv_sock.get_fd());
-    serv_sock.listen_req(net::localhost, 9090);
+    serv_sock.listen_req("127.0.0.1", 9090);
 
     auto conn_cb = [&](int) {
         int sock = 0;
@@ -58,7 +58,7 @@ int main() {
         std::cout << "disconnect " << fd << std::endl;
     });
     std::cout<<"服务端启动..."<<std::endl;
-    std::cout<<"IP地址: "<<net::localhost<<std::endl;
-    std::cout<<"端口号: "<<net::details::NET_DEFAULT_PORT<<std::endl;
+    std::cout<<"IP地址: "<<"127.0.0.1"<<std::endl;
+    std::cout<<"端口号: "<<9090<<std::endl;
     rec.activate();
 }

@@ -38,8 +38,8 @@ int main(int argn, char** args) {
         close(fd);
     });
 
-    // 也可以单独设置工作节点的回调且其优先级更高
-    if (recs.size() > 0) {
+    // 也可以单独设置工作节点的回调且其拥有更高优先级
+    if (recs.node_nums() > 0) {
         recs[0]->set_disconnect_cb([](int fd){
             std::cout<<"reactor disconnect: "<<fd<<std::endl;
             close(fd);

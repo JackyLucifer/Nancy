@@ -6,7 +6,7 @@ int main() {
     const char* hello = "Hello Nancy";
     net::tcp_clnt_socket clnt;
 
-    clnt.launch_req(net::localhost, 9090);
+    clnt.launch_req("127.0.0.1", 9090);
     write(clnt.get_fd(), hello, strlen(hello));
     std::cout<<"block in write"<<std::endl;
 

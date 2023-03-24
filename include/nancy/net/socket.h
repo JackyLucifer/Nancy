@@ -11,7 +11,6 @@
 
 #include "nancy/net/fd.h"
 #include "nancy/net/details/typedef.h"
-#include "nancy/net/details/config.h"
 
 namespace nc::net {
 
@@ -52,7 +51,7 @@ public:
      * @param ip 地址
      * @param port 端口
      */
-    void listen_req(const char* ip = net::localhost, int port = details::NET_DEFAULT_PORT) {
+    void listen_req(const char* ip, int port) {
         struct sockaddr_in sock_addr;
         memset(&sock_addr, 0, sizeof(sock_addr));
         inet_pton(AF_INET, ip, &sock_addr.sin_addr);
@@ -62,7 +61,10 @@ public:
         if (-1 == bind(sock, (struct sockaddr*)&sock_addr, sizeof(sock_addr))) {
             throw std::runtime_error(std::string("Nancy-socket: ")+std::string(strerror(errno)));
         }
-        if (-1 == listen(sock, details::TCP_LISTEN_QUEUE_LEN)) {
+        // if (-1 == listen(sock, details::TCP_LISTEN_QUEUE_LEN)) {
+        //     throw std::runtime_error(std::string("Nancy-socket: ")+std::string(strerror(errno)));
+        // }
+        if (-1 == listen(sock, 30)) {
             throw std::runtime_error(std::string("Nancy-socket: ")+std::string(strerror(errno)));
         }
     }
@@ -180,13 +182,17 @@ public:
     }
 };
 
+/**
+ * @brief a pair of socket
+ * @note 全双工
+*/
 class sockpair {
     int fds[2] = {0};
     static const int L = 0;
     static const int R = 1;
 public:
-    sockpair(int protocol = net::TCP_PROTOCOL) {
-        if (-1 == socketpair(PF_UNIX, protocol, 0, fds)) {
+    sockpair() {
+        if (-1 == socketpair(PF_UNIX, net::TCP_PROTOCOL ,0, fds)) {
             perror("Init sockpair");
             abort();
         }

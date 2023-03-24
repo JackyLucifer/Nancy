@@ -14,7 +14,7 @@ int main() {
     net::set_nonblocking(serv_sock.get_fd());
     net::set_reuse_address(serv_sock.get_fd());
     assert(net::get_recv_bufsz(serv_sock.get_fd()) >= mesg_sz); // 避免缓冲区过小影响测量结果
-    serv_sock.listen_req(net::localhost, 9090);
+    serv_sock.listen_req("127.0.0.1", 9090);
 
     auto conn_cb = [&](int) {
         int sock = 0;

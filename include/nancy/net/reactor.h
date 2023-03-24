@@ -14,7 +14,6 @@
 #include <memory>
 #include <functional>
 
-#include "nancy/net/details/config.h"
 #include "nancy/net/details/signal.h"
 #include "nancy/net/details/typedef.h"
 #include "nancy/net/socket.h"
@@ -36,14 +35,14 @@ class reactor {
     socket_callback_t readable_cb = {};
     socket_callback_t writable_cb = {};
     socket_callback_t disconnect_cb = {};
-    common_callback_t timeout_cb = {};
+    callback_t timeout_cb = {};
     std::unordered_map<int, socket_callback_t> cb_list = {};
     std::map<int, socket_callback_t> signal_cbs = {};
 
 public:
     explicit reactor(int timeout = -1) {
-        assert((epoll_fd = epoll_create(details::EPOLL_CREATE_SIZE)) != -1);
-        events.reset(new epoll_event[details::EPOLL_EVENT_BUF_SIZE]);
+        assert((epoll_fd = epoll_create(30)) != -1);
+        events.reset(new epoll_event[1024]);
         this->timeout = timeout;
     }
     ~reactor() noexcept {
@@ -56,7 +55,6 @@ private:
         event.data.fd = sock;
         event.events = ev | pattern | event::disconnect;
         if (-1 == epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock, &event)) {
-            std::cout<<"failed"<<std::endl;
             throw std::runtime_error(std::string("Nancy-reactor: ")+strerror(errno));
         }
     }
@@ -129,6 +127,14 @@ public:
         epoll_mod(for_whom, event, pattern);
     }
 
+    /**
+     * @brief 重置超时时间
+     * @param timeout 
+     */
+    void reset_timeout(int timeout) {
+        this->timeout = timeout;
+    }
+
     // 设置可写回调
     template <typename F,  typename = typename std::enable_if<nc::details::is_runnable<F, int>::value>::type>
     void set_readable_cb(F&& cb) {
@@ -152,14 +158,6 @@ public:
         timeout_cb = std::forward<F>(cb);
     }
 
-    /**
-     * @brief 重置超时时间
-     * @param timeout 
-     */
-    void reset_timeout(int timeout) {
-        this->timeout = timeout;
-    }
-
     // 获取可读事件的回调函数的引用
     auto get_readable_cb() -> const socket_callback_t& {
         return readable_cb;
@@ -176,10 +174,9 @@ public:
     }
 
     // 获取超时回调函数的引用
-    auto get_timeout_cb() -> const common_callback_t& {
+    auto get_timeout_cb() -> const callback_t& {
         return timeout_cb;
     }
-
 
     /**
      * @brief 激活reactor，并阻塞所在线程
@@ -189,7 +186,7 @@ public:
         int event_nums = 0;
         decltype(cb_list)::iterator it(nullptr);
         while (!stop) {
-            event_nums = epoll_wait(epoll_fd, events.get(), details::EPOLL_EVENT_BUF_SIZE, timeout);
+            event_nums = epoll_wait(epoll_fd, events.get(), 1024, timeout);
             if (!event_nums) 
                 timeout_cb();
             for (int i = 0; i < event_nums; i++) {
@@ -214,7 +211,8 @@ public:
     }
 
     /**
-     * @brief 关闭反应堆，能否立即执行要取决于timeout的设定和目前的执行状态等
+     * @brief 关闭反应堆
+     * @note 如果是同步关闭，则立刻执行，否则可能会延迟执行
      */
     void destroy() noexcept {
         if (!stop) {

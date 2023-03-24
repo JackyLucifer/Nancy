@@ -75,7 +75,7 @@ void test_simple_memorys() {
     assert(ms.count_bytes() == 120);
 
     unit = ms.get(120);
-    memcpy(unit.get(), "End of test", 13);
+    memcpy(unit.get(), "End of test", 12);
     std::cout<<static_cast<char*>(unit.get())<<std::endl;
 }
 

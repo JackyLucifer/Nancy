@@ -7,7 +7,7 @@
 namespace nc::net {
 
 /**
- * @brief 并发多节点反应堆，采用one-thread-per-loop + 监听端口反应堆分发套接字的模式实现高性能服务
+ * @brief 并发多节点反应堆(concurrent reactors)，采用one-thread-per-loop + 监听端口反应堆分发套接字的模式实现高性能服务
  * @note  接口并未被刻意设计为线程安全
  * @note  除activate外其它接口均为非阻塞的
  * @note  在activate时异步线程才被创建，此前的所有设置才生效。因此回调设置接口在activate前是可重入的。
@@ -24,7 +24,7 @@ class creactors {
         static const int bufsz = 128;
         async_node(int timeout)
             : rec(timeout) 
-            , pair(net::TCP_PROTOCOL) {
+            , pair() {
             req_buf.reset(new char[bufsz]);
         } 
         ~async_node() = default;
@@ -53,11 +53,11 @@ private:
     std::vector<node_ptr> nodes;
     std::vector<std::thread> workers;
 
+    net::reactor_callback_t timeout_cb = {};
     net::reactor_socket_callback_t conn_cb = {};
     net::reactor_socket_callback_t readable_cb = {};
     net::reactor_socket_callback_t writable_cb = {};
     net::reactor_socket_callback_t disconnect_cb = {};
-    net::reactor_common_callback_t timeout_cb = {};
 
 public:
     explicit creactors() {}
@@ -83,10 +83,10 @@ public:
                 while ((bytes = nodes[cur]->channel()->write_lfd((char*)&fd, sizeof(uint16_t))) != 2) {
                     cur = (cur + 1) % nodes.size();  // 向前查找
                     if (cur == old) {
-                        failures.push_back(fd);    // 推入溢出缓冲区的文件描述符
+                        failures.push_back(fd);      // 推入溢出缓冲区的文件描述符
                     }
                 } 
-                cur = (cur+1) % nodes.size();      // 负载均衡
+                cur = (cur+1) % nodes.size();        // 负载均衡
                 old = cur;
             }
         });
@@ -107,18 +107,18 @@ public:
     }
 
     /**
-     * @brief 判断是否存在因为工作节点阻塞导致与根节点的信道堵塞造成的fd溢出
+     * @brief 判断是否存在添加失败的fd
      * @return 溢出的文件描述符
      */
-    bool exist_overflow_fd() {
+    bool exist_failure_fd() {
         return failures.size();
     }
 
     /**
-     * @brief 同上，获取溢出的文件描述符
+     * @brief 同上，获取失败的文件描述符
      * @return 返回保存溢出描述符的vector
      */
-    auto get_overflow_fds()->std::vector<int>& {
+    auto get_failure_fds()->std::vector<int>& {
         return failures;
     }
 
@@ -204,7 +204,7 @@ public:
 
 public:
 
-    size_t size() {
+    size_t node_nums() {
         return nodes.size();
     }
 

@@ -500,8 +500,8 @@ private:
 
 // 异步日志
 class asynclogger {
-    details::file_writter writter;
     std::thread log_thread;
+    details::file_writter writter;
     details::buffer_queue mesg_que;
 
     bool stop = false;
@@ -584,6 +584,6 @@ private:
 } //nc::log
 
 #define LOGGER (*nc::log::asynclogger::instance())
-#define LOG_INFO LOGGER == nc::log::details::zipline(nc::log::details::LOG_LEVEL::INFO, __FILE__, __func__, __LINE__)
-#define LOG_WARN LOGGER == nc::log::details::zipline(nc::log::details::LOG_LEVEL::WARN, __FILE__, __func__, __LINE__)
-#define LOG_CRIT LOGGER == nc::log::details::zipline(nc::log::details::LOG_LEVEL::CRIT, __FILE__, __func__, __LINE__)
+#define LOG_INFO LOGGER == nc::log::details::zipline(nc::log::details::LOG_LEVEL::INFO,__FILE__,__func__,__LINE__)
+#define LOG_WARN LOGGER == nc::log::details::zipline(nc::log::details::LOG_LEVEL::WARN,__FILE__,__func__,__LINE__)
+#define LOG_CRIT LOGGER == nc::log::details::zipline(nc::log::details::LOG_LEVEL::CRIT,__FILE__,__func__,__LINE__)
