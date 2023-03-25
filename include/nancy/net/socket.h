@@ -61,9 +61,6 @@ public:
         if (-1 == bind(sock, (struct sockaddr*)&sock_addr, sizeof(sock_addr))) {
             throw std::runtime_error(std::string("Nancy-socket: ")+std::string(strerror(errno)));
         }
-        // if (-1 == listen(sock, details::TCP_LISTEN_QUEUE_LEN)) {
-        //     throw std::runtime_error(std::string("Nancy-socket: ")+std::string(strerror(errno)));
-        // }
         if (-1 == listen(sock, 30)) {
             throw std::runtime_error(std::string("Nancy-socket: ")+std::string(strerror(errno)));
         }
